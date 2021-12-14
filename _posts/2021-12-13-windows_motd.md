@@ -5,32 +5,28 @@ categories: [Windows, Server administration]
 tags: [pinned,windows,winrm,pssession,pssessionconfiguration,motd,banner]     # TAG names should always be lowercase
 ---
 
-## Description
-
-Setting up a completely new windows environment comes with some one time configurations. One of those is legal notice texts and banners. Aside from the usual legalnotice text registry key, which only sets a legal message for Remote Desktop Connections. There is also a way to configure MOTD banners for Winrm PSSessions.
+Setting up a completely new windows environment comes with some one time configurations. One of those is legal notice texts and banners. Aside from the usual legalnotice text registry key, which only sets a legal message for Remote Desktop Connections. There is also a way to configure MOTD banners when connecting over Winrm to a windows host in powershell (Enter-PSSession).
 
 Here's an example of what it might look like:
 ![image](/assets/motd/motd_example.png)
 
-### Set up
+## Set up
 
 To have a nice banner as shown in the screenshot above. We need the following:
 
-- Environment variables, useful info to show upon startup
-- Ensure the presence of the banner startup script
-- Set the remote session configuration
+1. Environment variables, useful info to show upon startup
+2. Ensure the presence of the banner startup script
+3. Set the remote session configuration
 
-For the sake of being generic let's say we decide on a motd_path filepath, which can be interpreted as: 'C:\whereveryouwant\motd\'
-
-In the environment for which I configured this we are using Puppet as a configuration manager. But I suppose this could be translated to any other configuration managers. The main idea is to be able to ensure presence of files and configurations, preferably in a declarative way. In my case puppet will run every X amount of time and reconfigure everything that is configured differently in it's manifest.
+For the sake of being generic let's say we decide on a __motd_path__ filepath, which can be interpreted as: 'C:\whereveryouwant\motd\'. In the environment for which I configured this we are using Puppet as a configuration manager. But I suppose this could be translated to any other configuration manager.
 
 &nbsp;
 
-### Environment variables
+## 1. Environment variables
 
 Aside from a nice logo that is shown, we would like to see some useful information concerning the machine you are connecting to. This could be the machine name, ip address, current disk space used, full FQDN, status of certain services. The needs may differ here, change at will.
 
-In my case I use a configuration manager to ensure the presence of a PowerShell Datafile (.psd1) in the motd_path. Using the .psd1 format allows us to import the file in PowerShell as nice hashtable. Which we can parse and use all around.The psd1 file looks something like:
+In my case I use a configuration manager to ensure the presence of a PowerShell Datafile (.psd1) in the motd_path, parsed with some environment variables. Using the .psd1 format allows us to import the file in PowerShell as nice hashtable. Since I'm using puppet at this time, I am putting this file as a ruby template in a module (applied on the machine). Which will parse the variables in between the '<%= %>' with machine variables and facts. The psd1 file looks something like:
 
 ```powershell
 @{
@@ -50,17 +46,17 @@ In my case I use a configuration manager to ensure the presence of a PowerShell 
 }
 ```
 
-In my case, when using Puppet template files. I am putting this file as a ruby template in a module. Which will parse (in Ruby) the variables in between the '<%= %>' with machine variables and facts.
+The .psd1 will be imported in to a variable used throughout the nexts script to put the info in the right place. I can imagine that this can be reworked to contain perhaps performance metrics or anything really.
 
 &nbsp;
 
-### Startupscsript
+## 2. Startupscsript
 
 Now for the second file we need to have in the motd_path. This is the actual script that will run at startup to display the banner. A couple of things to note:
 
 - __Save the file as UTF8 With BOM__. If this is not done, the characters for the borders will be all messed up because of incompatible file encoding.
 
-- When I'm importing the psd1 file, I'm again parsing a Ruby variable in puppet to ensure to have the correct path. This could be replaced with some declaration on where the script is located (something like "$ScriptPath = Split-Path $MyInvocation.MyCommand.Path")
+- When importing the psd1 file, I'm again parsing a Ruby variable in puppet to ensure to have the correct path. This could be replaced with some declaration on where the script is located (something like "$ScriptPath = Split-Path $MyInvocation.MyCommand.Path")
 
 - In the beginning of the script (the switch statement) I'm deciding whether or not to show the logo because of screen size constraints. I thought it'd be nice to have scaling responsive message. And if the console size is ridiculously small, i'm resorting to a simple echo of the legalnotice text.
 
@@ -179,14 +175,13 @@ if($drawBox){
 }
 ```
 
-__Note:__ The windows logo I found on [GitHub](https://github.com/joeyaiello/ps-motd), it was all write-host (some 300 lines). I decided to rewrite it to have the hashtable with the logo and the session info. And to build the banner with the nested loops. My thought was that it's shorter, nicer and more readable. However using nested loops like that my come with some performance impact. Maybe it's a bit harder on the cpu when the script runs. I found when testing that it was not that bad of a delay compared to using the millions of write-host statements. Depends on the case and what you prefer.
+__Note:__ I have to disclaim that I found the windows logo on [GitHub](https://github.com/joeyaiello/ps-motd), credit where credit is due. I decided to rewrite it abit to have the logo in a hashtable together with the session info. And to build the banner with the nested loops. My thought was that it's shorter, nicer and more readable. However using nested loops like that my come with some performance impact. Maybe it's a bit harder on the cpu when the script runs. I found when testing that it was not that bad of a delay compared to using the millions of write-host statements. Depends on the case and what you prefer.
 
 &nbsp;
 
-### Set-PSSessionConfiguration
+## 3. Set-PSSessionConfiguration
 
 Now that we have all the necessary files in place, we need to configure the machine to run the motd.ps1 script on startup of a Remote Session. We need to point the PSSessionConfiguration for the microsoft.powershell profile to the startupscript, or create a new profile. Again depends on the use case.
-
 
 ```powershell
 #decide if config needs to be set
@@ -198,10 +193,12 @@ if((Get-PSSessionConfiguration | where name -like 'microsoft.powershell').startu
 }
 ```
 
-I prefer to put the NoServiceRestart when setting the configuration because when testing in my environment I found that setting the startupscript did not require the pssesion (winrm) service to restart. __Warning: if you do not specify the argument NoServiceRestart, the winrm service will restart and all current remote session will be disconnected...__
+I prefer to put the NoServiceRestart when setting the configuration because when testing in my environment I found that setting the startupscript in this case did not require the pssesion (winrm) service to restart. __Warning: if you do not specify the argument NoServiceRestart, the winrm service will restart and all current remote session will be disconnected...__
 
 Once all this is configured, once you do an Enter-PSSession to a machine this is configured on. You should see a nice banner.
 
-### Sources
+## Sources
 
-Special credit goes to the github user [joeyaiello, whose project](https://github.com/joeyaiello/ps-motd) inspired me, specifically for the windows logo.
+- Special credit goes to the github user [joeyaiello, whose project](https://github.com/joeyaiello/ps-motd) inspired me, specifically for the windows logo.
+
+- Microsoft Doc: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/set-pssessionconfiguration?view=powershell-7.2
