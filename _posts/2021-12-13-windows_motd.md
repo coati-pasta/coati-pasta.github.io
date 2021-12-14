@@ -28,9 +28,9 @@ In the environment for which I configured this we are using Puppet as a configur
 
 ### Environment variables
 
-Aside from a nice logo that is shown, we would like to see some useful information concerning the machine you are connecting to. This could be the machine name, ip address, current disk space used, full FQDN, status of certain services. The needs here might differ from case to case.
+Aside from a nice logo that is shown, we would like to see some useful information concerning the machine you are connecting to. This could be the machine name, ip address, current disk space used, full FQDN, status of certain services. The needs may differ here, change at will.
 
-In my use case I use a configuration manager to ensure the presence of a PowerShell Datafile (.psd1) in the motd_path. Using the .psd1 format allows us to import the file in PowerShell as nice hash. Which we can parse and use all around.The psd1 file looks something like:
+In my case I use a configuration manager to ensure the presence of a PowerShell Datafile (.psd1) in the motd_path. Using the .psd1 format allows us to import the file in PowerShell as nice hashtable. Which we can parse and use all around.The psd1 file looks something like:
 
 ```powershell
 @{
@@ -46,7 +46,7 @@ In my use case I use a configuration manager to ensure the presence of a PowerSh
     OS             = '<%= @windows_product_name %>';
     Hostname       = '<%= @hostname %>';
     'Server Type'  = '<%= @operatingsystemtype %>';
-    someInfo9      = '<%= @enviroment %>';
+    someInfo9      = '<%= @environment %>';
 }
 ```
 
@@ -56,13 +56,13 @@ In my case, when using Puppet template files. I am putting this file as a ruby t
 
 ### Startupscsript
 
-Now for the second file we need to have in the motd_path. The actual script that will run at startup to display the banner. A couple of things to note:
+Now for the second file we need to have in the motd_path. This is the actual script that will run at startup to display the banner. A couple of things to note:
 
 - __Save the file as UTF8 With BOM__. If this is not done, the characters for the borders will be all messed up because of incompatible file encoding.
 
 - When I'm importing the psd1 file, I'm again parsing a Ruby variable in puppet to ensure to have the correct path. This could be replaced with some declaration on where the script is located (something like "$ScriptPath = Split-Path $MyInvocation.MyCommand.Path")
 
-- In the beginning of the script (the switch statement) I'm deciding whether or not to show the logo because of screen size constraints. I thought it'd be nice to have scaling responsive message.
+- In the beginning of the script (the switch statement) I'm deciding whether or not to show the logo because of screen size constraints. I thought it'd be nice to have scaling responsive message. And if the console size is ridiculously small, i'm resorting to a simple echo of the legalnotice text.
 
 ```powershell
 ## ATTENTION ::  This file needs to be saved with encoding UTF8 With BOM !!! otherwise special characters will not be loaded properly
@@ -179,15 +179,14 @@ if($drawBox){
 }
 ```
 
-__Note:__ The windows logo I found on github here, it was all write-host (some 300 lines). I decided to rewrite it to have the hashtable with the logo and the session info. And to build the banner with the nested loops. My thought was that it's shorter, nicer and more readable. However using nested loops like that my come with some performance impact. Maybe it's a bit harder on the cpu when the script runs. I found when testing that it was not that bad of a delay compared to using the millions of write-host statements. Depends on the case and what you prefer.
+__Note:__ The windows logo I found on [GitHub](https://github.com/joeyaiello/ps-motd), it was all write-host (some 300 lines). I decided to rewrite it to have the hashtable with the logo and the session info. And to build the banner with the nested loops. My thought was that it's shorter, nicer and more readable. However using nested loops like that my come with some performance impact. Maybe it's a bit harder on the cpu when the script runs. I found when testing that it was not that bad of a delay compared to using the millions of write-host statements. Depends on the case and what you prefer.
 
 &nbsp;
 
 ### Set-PSSessionConfiguration
 
-Now that we have all the necessary files in place, we need to configure the machine to run the motd.ps1 script on startup of a Remote Session. We need to point the PSSessionConfiguration for the microsoft.powershell profile, or create a new profile. Again depends on the use case.
+Now that we have all the necessary files in place, we need to configure the machine to run the motd.ps1 script on startup of a Remote Session. We need to point the PSSessionConfiguration for the microsoft.powershell profile to the startupscript, or create a new profile. Again depends on the use case.
 
-In your configuration manager you basically have to set the pssession configuration as seen in the code block below. In my case when using puppet I declared a DSC style block to configure it whenever the microsoft.powershell startupscript was pointing to the wrong place.
 
 ```powershell
 #decide if config needs to be set
@@ -200,6 +199,8 @@ if((Get-PSSessionConfiguration | where name -like 'microsoft.powershell').startu
 ```
 
 I prefer to put the NoServiceRestart when setting the configuration because when testing in my environment I found that setting the startupscript did not require the pssesion (winrm) service to restart. __Warning: if you do not specify the argument NoServiceRestart, the winrm service will restart and all current remote session will be disconnected...__
+
+Once all this is configured, once you do an Enter-PSSession to a machine this is configured on. You should see a nice banner.
 
 ### Sources
 
